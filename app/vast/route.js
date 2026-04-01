@@ -5,15 +5,11 @@ export async function GET(request) {
   const id = searchParams.get('id');
 
   if (!id) {
-    return new NextResponse('Error: ID iklan tidak disertakan pada URL.', { status: 400 });
+    return new NextResponse('Error: ID iklan tidak disertakan.', { status: 400 });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    return new NextResponse('Error: Supabase URL atau Key belum disetting di Vercel.', { status: 500 });
-  }
 
   try {
     const res = await fetch(`${supabaseUrl}/rest/v1/vast_ads?id=eq.${id}&select=*`, {
@@ -25,33 +21,34 @@ export async function GET(request) {
     });
 
     const data = await res.json();
-
-    if (!data || data.length === 0) {
-      return new NextResponse('Error: Iklan dengan ID tersebut tidak ditemukan.', { status: 404 });
-    }
-
+    if (!data || data.length === 0) return new NextResponse('Not found', { status: 404 });
     const ad = data[0];
 
-    // ROMBAKAN XML: ID dipalsukan jadi angka 1, ditambah resolusi, dan tracker diubah ke format gambar transparan.
+    // TEMPLATE XML MENIRU EXACTLY STRUKTUR EXOCLICK
     const xmlTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <VAST version="3.0">
-  <Ad id="1">
+  <Ad id="7675374">
     <InLine>
       <AdSystem>Vidly88</AdSystem>
-      <AdTitle><![CDATA[${ad.title}]]></AdTitle>
-      <Description><![CDATA[${ad.description || 'Vidly Ad'}]]></Description>
+      <AdTitle/>
+      <Impression id="exotr"><![CDATA[https://httpbin.org/status/200]]></Impression>
       
-      <Impression id="track">
-        <![CDATA[https://upload.wikimedia.org/wikipedia/commons/c/ce/Transparent.gif]]>
-      </Impression>
+      <Error><![CDATA[https://httpbin.org/status/200]]></Error>
       
       <Creatives>
-        <Creative sequence="1" id="1">
-          <Linear skipoffset="00:00:15">
-            <Duration>00:00:30</Duration>
+        <Creative sequence="1" id="117555238">
+          <Linear skipoffset="00:00:00.0">
+            <Duration>00:00:30.000</Duration>
+            
+            <TrackingEvents>
+              <Tracking event="progress" offset="00:00:10.000"><![CDATA[https://httpbin.org/status/200]]></Tracking>
+              <Tracking event="progress" offset="00:00:15.000"><![CDATA[https://httpbin.org/status/200]]></Tracking>
+            </TrackingEvents>
+            
             <VideoClicks>
               <ClickThrough><![CDATA[${ad.click_link}]]></ClickThrough>
             </VideoClicks>
+            
             <MediaFiles>
               <MediaFile delivery="progressive" type="video/mp4" width="1280" height="720">
                 <![CDATA[${ad.video_url}]]>
@@ -64,19 +61,18 @@ export async function GET(request) {
   </Ad>
 </VAST>`;
 
-    // Menggunakan tipe data application/xml yang lebih diakui oleh player ketat
     return new NextResponse(xmlTemplate, {
       status: 200,
       headers: {
-        'Content-Type': 'application/xml; charset=utf-8',
+        'Content-Type': 'text/xml; charset=utf-8',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Cache-Control': 'no-store, max-age=0' // Mencegah Vercel menyimpan cache versi lama
+        'Cache-Control': 'no-store, max-age=0'
       },
     });
 
   } catch (error) {
-    return new NextResponse('Internal Server Error', { status: 500 });
+    return new NextResponse('Internal Error', { status: 500 });
   }
 }
 
