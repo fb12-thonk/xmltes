@@ -5,11 +5,15 @@ export async function GET(request) {
   const id = searchParams.get('id');
 
   if (!id) {
-    return new NextResponse('Error: ID iklan tidak disertakan.', { status: 400 });
+    return new NextResponse('Error: ID iklan tidak disertakan pada URL.', { status: 400 });
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return new NextResponse('Error: Supabase URL atau Key belum disetting di Vercel.', { status: 500 });
+  }
 
   try {
     const res = await fetch(`${supabaseUrl}/rest/v1/vast_ads?id=eq.${id}&select=*`, {
@@ -21,39 +25,50 @@ export async function GET(request) {
     });
 
     const data = await res.json();
-    if (!data || data.length === 0) return new NextResponse('Not found', { status: 404 });
+
+    if (!data || data.length === 0) {
+      return new NextResponse('Error: Iklan dengan ID tersebut tidak ditemukan.', { status: 404 });
+    }
+
     const ad = data[0];
 
-    // TEMPLATE XML MENIRU EXACTLY STRUKTUR EXOCLICK
+    // TEMPLATE XML FULL STANDAR GOOGLE IMA
     const xmlTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <VAST version="3.0">
-  <Ad id="7675374">
+  <Ad id="${ad.id}">
     <InLine>
-      <AdSystem>Vidly88</AdSystem>
-      <AdTitle/>
-      <Impression id="exotr"><![CDATA[https://httpbin.org/status/200]]></Impression>
+      <AdSystem>Vidly88 Ad Network</AdSystem>
+      <AdTitle><![CDATA[${ad.title}]]></AdTitle>
+      <Description><![CDATA[${ad.description || 'Vidly88 Advertisement'}]]></Description>
       
-      <Error><![CDATA[https://httpbin.org/status/200]]></Error>
+      <!-- Tracker Dummy (Wajib ada biar player gak ngira error) -->
+      <Impression id="imp_track"><![CDATA[https://upload.wikimedia.org/wikipedia/commons/c/ce/Transparent.gif]]></Impression>
+      <Error><![CDATA[https://upload.wikimedia.org/wikipedia/commons/c/ce/Transparent.gif]]></Error>
       
       <Creatives>
-        <Creative sequence="1" id="117555238">
-          <Linear skipoffset="00:00:00.0">
-            <Duration>00:00:30.000</Duration>
+        <Creative sequence="1" id="creative_1">
+          <!-- Tombol Skip Muncul Setelah 20 Detik -->
+          <Linear skipoffset="00:00:20">
+            
+            <!-- Durasi dipatok 1 Jam biar skipoffset pasti jalan berapapun panjang videonya -->
+            <Duration>01:00:00</Duration>
             
             <TrackingEvents>
-              <Tracking event="progress" offset="00:00:10.000"><![CDATA[https://httpbin.org/status/200]]></Tracking>
-              <Tracking event="progress" offset="00:00:15.000"><![CDATA[https://httpbin.org/status/200]]></Tracking>
+              <Tracking event="start"><![CDATA[https://upload.wikimedia.org/wikipedia/commons/c/ce/Transparent.gif]]></Tracking>
             </TrackingEvents>
             
+            <!-- Link Offer: Seluruh layar video otomatis bisa diklik -->
             <VideoClicks>
               <ClickThrough><![CDATA[${ad.click_link}]]></ClickThrough>
             </VideoClicks>
             
+            <!-- File Video -->
             <MediaFiles>
               <MediaFile delivery="progressive" type="video/mp4" width="1280" height="720">
                 <![CDATA[${ad.video_url}]]>
               </MediaFile>
             </MediaFiles>
+            
           </Linear>
         </Creative>
       </Creatives>
@@ -64,18 +79,19 @@ export async function GET(request) {
     return new NextResponse(xmlTemplate, {
       status: 200,
       headers: {
-        'Content-Type': 'text/xml; charset=utf-8',
+        'Content-Type': 'application/xml; charset=utf-8',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Cache-Control': 'no-store, max-age=0'
+        'Cache-Control': 'no-store, max-age=0' // Cegah Vercel ngasih data XML basi
       },
     });
 
   } catch (error) {
-    return new NextResponse('Internal Error', { status: 500 });
+    return new NextResponse('Internal Server Error', { status: 500 });
   }
 }
 
+// Handler untuk preflight CORS request dari Video Player
 export async function OPTIONS() {
   return new NextResponse(null, {
     headers: {
